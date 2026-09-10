@@ -1,0 +1,18 @@
+# Volume counting — total vehicles crossing one or more count lines.
+# Class is ignored; we only need throughput.
+
+video: ../videos/sample.mp4
+model: yolov8n.pt
+conf: 0.35
+bin_minutes: 15
+
+# Pixel coordinates of count lines (drawn on the first frame).
+# Each line is two points; vehicles crossing it are counted.
+lines:
+  - name: NB
+    points: [[400, 600], [900, 600]]
+  - name: SB
+    points: [[400, 650], [900, 650]]
+
+output:
+  xlsx: ../outputs/volume_counts.xlsx

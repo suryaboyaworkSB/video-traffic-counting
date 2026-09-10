@@ -1,0 +1,21 @@
+# Core detection / tracking
+ultralytics>=8.2.0          # YOLOv8 / YOLOv11
+opencv-python>=4.9.0
+numpy>=1.26.0
+torch>=2.2.0
+torchvision>=0.17.0
+
+# Tracking
+lap>=0.4.0                  # ByteTrack dependency
+filterpy>=1.4.5             # Kalman filter for trackers
+scipy>=1.12.0
+
+# Data / output
+pandas>=2.2.0
+openpyxl>=3.1.2             # Excel writing
+xlsxwriter>=3.2.0           # Charts in Excel
+
+# Utilities
+pyyaml>=6.0
+tqdm>=4.66.0
+shapely>=2.0.0              # For zones / turning movement polygons

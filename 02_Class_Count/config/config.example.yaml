@@ -1,0 +1,19 @@
+# Class counting — counts vehicles per category crossing each line.
+# Same line geometry as volume, but rows are split by vehicle class.
+
+video: ../videos/sample.mp4
+model: yolov8n.pt
+conf: 0.35
+bin_minutes: 15
+
+# Restrict YOLO detections to vehicle-like COCO classes
+classes: [1, 2, 3, 5, 7]   # bicycle, car, motorcycle, bus, truck
+
+lines:
+  - name: NB
+    points: [[400, 600], [900, 600]]
+  - name: SB
+    points: [[400, 650], [900, 650]]
+
+output:
+  xlsx: ../outputs/class_counts.xlsx

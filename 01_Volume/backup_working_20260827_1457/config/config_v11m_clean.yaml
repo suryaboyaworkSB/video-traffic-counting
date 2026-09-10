@@ -1,0 +1,55 @@
+# =============================================================================
+# YOLO11m CLEAN RE-RUN CONFIG
+# =============================================================================
+# Purpose: apples-to-apples model comparison against the -6.3% v8m baseline.
+# ONLY the model changes; all filter values match the original baseline setup.
+# Line points reflect your final magenta selection.
+#
+# NEW parameter: dedup_spatial_buffer_px (requires patched count_volume.py)
+# =============================================================================
+
+video: ../videos/183907b-c.mp4
+model: yolo11m.pt                    # was yolov8m.pt / yolov8l.pt — this is the swap
+conf: 0.25
+bin_minutes: 15
+
+# COCO vehicle classes: bicycle, car, motorcycle, bus, truck
+classes: [1, 2, 3, 5, 7]
+
+# ---- Anti-overcount filters (match original baseline) ----
+min_track_age_frames: 2              # filter true 1-frame flickers only
+min_bbox_area_px: 400                # ignore truly tiny boxes (~20x20 px)
+dedup_seconds: 0.8                   # temporal window for same-direction dedup
+dedup_spatial_buffer_px: 100         # NEW: only dedup if also within 100 px
+                                     # horizontally (distinguishes tracker
+                                     # fragmentation from side-by-side vehicles)
+
+# ---- Count line (magenta) ----
+lines:
+  - name: Main
+    points: [[69, 272], [387, 312]]
+
+direction_names:
+  A: Direction A
+  B: Direction B
+
+# ---- Night-mode headlight-pair detector (from baseline) ----
+
+night:
+  roi_y_min: 100
+  pair_max_dx: 40
+  pair_max_dy: 8
+  track_max_distance: 45
+  track_max_missed: 12
+  merge_distance: 80
+  singleton_min_area: 120
+  dedup_seconds_night: 1.0
+  dedup_spatial_buffer_px_night: 100    # NEW - matches day-side buffer
+
+
+
+# ---- Output ----
+output:
+  xlsx: ../outputs/volume_counts_v11m_clean.xlsx
+
+

@@ -1,0 +1,32 @@
+# Turning Movement Count (TMC) with class.
+# We define approach zones (one per approach leg) and depart zones.
+# A vehicle's movement is determined by (entry approach -> exit approach):
+#   - same approach: U-turn
+#   - opposite: Through
+#   - left/right: Left / Right turn
+#
+# Standard 4-leg intersection legs: N, S, E, W.
+
+video: ../videos/sample.mp4
+model: yolov8n.pt
+conf: 0.35
+bin_minutes: 15
+classes: [1, 2, 3, 5, 7]
+
+# Polygon zones (pixel coords). Replace with real coordinates from your video.
+approaches:
+  N: [[600, 0], [800, 0], [800, 200], [600, 200]]
+  S: [[600, 900], [800, 900], [800, 1080], [600, 1080]]
+  E: [[1500, 400], [1920, 400], [1920, 600], [1500, 600]]
+  W: [[0, 400], [400, 400], [400, 600], [0, 600]]
+
+# Turning movement matrix from approach -> departure
+# (configured for typical right-side driving)
+movements:
+  N: {S: "Through", E: "Right", W: "Left", N: "U-turn"}
+  S: {N: "Through", W: "Right", E: "Left", S: "U-turn"}
+  E: {W: "Through", N: "Right", S: "Left", E: "U-turn"}
+  W: {E: "Through", S: "Right", N: "Left", W: "U-turn"}
+
+output:
+  xlsx: ../outputs/tmc_class_counts.xlsx

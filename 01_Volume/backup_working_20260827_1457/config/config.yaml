@@ -1,0 +1,39 @@
+model: yolo11m.pt
+video: /home/suryaprasanthboya/traffic_project/videos/183907b-c.mp4
+conf: 0.25
+bin_minutes: 15
+classes:
+  - 1
+  - 2
+  - 3
+  - 5
+  - 7
+min_track_age_frames: 2
+min_bbox_area_px: 400
+dedup_seconds: 0.8                     # <-- 0.8, NOT 1.5
+lines:
+  - name: Main
+    points:
+      - [102, 327]
+      - [296, 340]
+direction_names:
+  A: Direction A
+  B: Direction B
+night:
+  roi_y_min: 100
+  pair_max_dx: 40
+  pair_max_dy: 8
+  track_max_distance: 35
+  track_max_missed: 5
+output:
+  xlsx: ../outputs/volume_counts.xlsx
+zone:
+  far_line:
+    - [130, 285]
+    - [290, 295]
+  near_line:
+    - [80, 370]
+    - [310, 385]
+  match_window_s: 6.0
+  match_x_tolerance: 200
+  dedup_seconds: 1.0

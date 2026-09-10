@@ -1,0 +1,166 @@
+"""
+Volume counting v2 — spatial+temporal dedup + direction filter.
+
+Anti-overcount filters:
+  - min_track_age_frames:        skip tracks that haven't existed long enough
+  - min_bbox_area_px:            skip detections smaller than this
+  - dedup_seconds:               merge same-direction crossings closer in time
+  - dedup_spatial_buffer_px:     only dedup if crossings also close in x-position
+  - allowed_directions:          NEW - if set, only count listed directions
+                                 (e.g. ["A"] for one-way roads)
+
+Usage:
+    python count_volume.py --config ../config/config.yaml
+"""
+
+import argparse
+from collections import defaultdict
+from pathlib import Path
+
+import pandas as pd
+import yaml
+
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from shared.utils.tracker import track_video
+from shared.utils.zones import bbox_center, crossed_line
+
+
+def line_normal_side(prev, curr, line):
+    (x1, y1), (x2, y2) = line[0], line[1]
+    px, py = prev
+    cross = (x2 - x1) * (py - y1) - (y2 - y1) * (px - x1)
+    return "A" if cross > 0 else "B"
+
+
+def bbox_area(xyxy):
+    x1, y1, x2, y2 = xyxy
+    return max(0.0, x2 - x1) * max(0.0, y2 - y1)
+
+
+def main(cfg_path: str, max_seconds: float | None = None) -> None:
+    cfg = yaml.safe_load(Path(cfg_path).read_text())
+    bin_minutes = cfg.get("bin_minutes", 15)
+    direction_names = cfg.get("direction_names", {"A": "Direction A", "B": "Direction B"})
+
+    # Anti-overcount filters
+    min_track_age = int(cfg.get("min_track_age_frames", 2))
+    min_area = float(cfg.get("min_bbox_area_px", 400))
+    dedup_seconds = float(cfg.get("dedup_seconds", 0.8))
+    dedup_spatial_buffer_px = float(cfg.get("dedup_spatial_buffer_px", 100))
+    allowed_directions = cfg.get("allowed_directions")   # NEW: None = both allowed
+
+    last_pos: dict[int, tuple[float, float]] = {}
+    track_age: dict[int, int] = defaultdict(int)
+    counted_by_line: dict[str, set[int]] = defaultdict(set)
+    crossing_history: dict[tuple[str, str], list] = defaultdict(list)
+
+    raw_rows = []
+    rows = []
+
+    for det in track_video(cfg["video"], model_path=cfg["model"],
+                           conf=cfg["conf"], classes=cfg.get("classes")):
+        if max_seconds is not None and det["timestamp_s"] > max_seconds:
+            break
+
+        tid = det["track_id"]
+        track_age[tid] += 1
+        curr = bbox_center(det["xyxy"])
+        prev = last_pos.get(tid)
+        last_pos[tid] = curr
+        if prev is None:
+            continue
+
+        for line in cfg["lines"]:
+            if tid in counted_by_line[line["name"]]:
+                continue
+            if not crossed_line(prev, curr, line["points"]):
+                continue
+
+            side = line_normal_side(prev, curr, line["points"])
+            dir_name = direction_names.get(side, side)
+            area = bbox_area(det["xyxy"])
+            age = track_age[tid]
+            ts = det["timestamp_s"]
+
+            reason = "accepted"
+            if age < min_track_age:
+                reason = f"track_age<{min_track_age}"
+            elif area < min_area:
+                reason = f"bbox_area<{min_area:.0f}"
+            elif allowed_directions and side not in allowed_directions:
+                reason = f"direction_filter:{side}_not_allowed"
+            else:
+                key = (line["name"], side)
+                history = crossing_history[key]
+                history[:] = [(t, x) for t, x in history if (ts - t) < dedup_seconds]
+                curr_x = curr[0]
+                for _, prev_x in history:
+                    if abs(curr_x - prev_x) < dedup_spatial_buffer_px:
+                        reason = (f"dedup<{dedup_seconds}s AND "
+                                  f"within {dedup_spatial_buffer_px:.0f}px")
+                        break
+
+            raw_rows.append({
+                "timestamp_s": ts,
+                "line": line["name"],
+                "track_id": tid,
+                "direction_code": side,
+                "direction": dir_name,
+                "bbox_area": area,
+                "track_age_frames": age,
+                "filter_result": reason,
+            })
+
+            if reason == "accepted":
+                counted_by_line[line["name"]].add(tid)
+                crossing_history[(line["name"], side)].append((ts, curr[0]))
+                rows.append({
+                    "timestamp_s": ts,
+                    "line": line["name"],
+                    "track_id": tid,
+                    "direction_code": side,
+                    "direction": dir_name,
+                })
+
+    df = pd.DataFrame(rows)
+    raw_df = pd.DataFrame(raw_rows)
+
+    if df.empty:
+        print("No crossings accepted after filters.")
+        return
+
+    df["bin_min"] = (df["timestamp_s"] // (bin_minutes * 60)).astype(int) * bin_minutes
+
+    by_bin = df.pivot_table(index="bin_min", columns="direction",
+                            values="track_id", aggfunc="count", fill_value=0)
+    by_bin["Total"] = by_bin.sum(axis=1)
+
+    totals = df.groupby("direction")["track_id"].nunique().to_frame("Vehicles")
+    totals.loc["TOTAL"] = totals["Vehicles"].sum()
+
+    filter_summary = (raw_df.groupby(["direction", "filter_result"])
+                      .size().to_frame("count").reset_index())
+
+    out = Path(cfg["output"]["xlsx"])
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with pd.ExcelWriter(out, engine="xlsxwriter") as xw:
+        totals.to_excel(xw, sheet_name="Summary")
+        by_bin.to_excel(xw, sheet_name="Volume by 15-min")
+        df.to_excel(xw, sheet_name="Raw crossings (kept)", index=False)
+        raw_df.to_excel(xw, sheet_name="All crossings (debug)", index=False)
+        filter_summary.to_excel(xw, sheet_name="Filter summary", index=False)
+    print(f"Wrote {out}")
+    print(totals)
+    print()
+    print("Filter breakdown:")
+    print(filter_summary.to_string(index=False))
+
+
+if __name__ == "__main__":
+    p = argparse.ArgumentParser()
+    p.add_argument("--config", required=True)
+    p.add_argument("--max-seconds", type=float, default=None)
+    args = p.parse_args()
+    main(args.config, args.max_seconds)

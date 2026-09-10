@@ -1,0 +1,33 @@
+# Videos and large media
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.MP4
+
+# Model weights
+*.pt
+*.onnx
+*.engine
+
+# Outputs (keep folder, ignore contents)
+**/outputs/*
+!**/outputs/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# stray downloads/zips
+*.zip
+ziE5sR64
